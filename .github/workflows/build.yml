@@ -1,0 +1,44 @@
+name: Build Python EXE
+
+# Этот workflow будет запускаться при каждом обновлении кода в главной ветке (main или master)
+on:
+  push:
+    branches: [ "main", "master" ]
+  # Это позволяет запустить сборку вручную из вкладки Actions
+  workflow_dispatch:
+
+jobs:
+  build:
+    # Запускаем на виртуальной машине с Windows
+    runs-on: windows-latest
+
+    steps:
+      # 1. Скачиваем ваш код на виртуальную машину
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Устанавливаем Python (можно изменить версию на свою)
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11' # Укажите вашу версию Python
+
+      # 3. Устанавливаем зависимости и PyInstaller
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      # 4. Собираем EXE с помощью PyInstaller
+      - name: Build with PyInstaller
+        # ЗАМЕНИТЕ 'main.py' на имя вашего главного файла!
+        run: pyinstaller --onefile --name my_app main.py
+
+      # 5. Загружаем готовый EXE файл как артефакт
+      - name: Upload EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: my-windows-app
+          # Путь к собранному файлу (PyInstaller кладет его в папку dist)
+          path: dist/my_app.exe
