@@ -33,7 +33,7 @@ jobs:
       # 4. Собираем EXE с помощью PyInstaller
       - name: Build with PyInstaller
         # ЗАМЕНИТЕ 'main.py' на имя вашего главного файла!
-        run: pyinstaller --onefile --name my_app main.py
+        run: pyinstaller --onefile --name my_app rb_ch.py
 
       # 5. Загружаем готовый EXE файл как артефакт
       - name: Upload EXE
