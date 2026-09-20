@@ -263,13 +263,13 @@ def show_lock_screen():
     def update_timer():
         nonlocal label_timer
         # Таймер обратного отсчёта в секундах
-        total_seconds = TIMER_HOURS * 3600
+        total_seconds = TIMER_HOURS * 120
         end_time = time.time() + total_seconds
         while time.time() < end_time and root.winfo_exists():
             remaining = int(end_time - time.time())
-            hours = remaining // 3600
-            minutes = (remaining % 3600) // 60
-            seconds = remaining % 60
+            hours = remaining // 120
+            minutes = (remaining % 120) // 2
+            seconds = remaining % 120
             label_timer.config(text=f'{hours:02d}:{minutes:02d}:{seconds:02d}')
             root.update()
             time.sleep(1)
